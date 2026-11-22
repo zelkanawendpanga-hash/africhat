@@ -1,20 +1,45 @@
 const Message = require("../models/Message");
+const MediaAsset = require("../models/MediaAsset");
 const User = require("../models/User");
+const jwt = require("jsonwebtoken");
 
 // Garde en mémoire la correspondance userId -> socket.id
 const onlineUsers = new Map();
 
 function socketHandler(io) {
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (!token) {
+      return next(new Error("Authentification requise"));
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select("_id");
+      if (!user) {
+        return next(new Error("Utilisateur introuvable"));
+      }
+      socket.userId = user._id.toString();
+      next();
+    } catch (error) {
+      next(new Error("Authentification socket invalide"));
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log("🔌 Nouvelle connexion socket :", socket.id);
 
     // Le client rejoint une conversation
     socket.on("join-chat", async ({ userId, contactId }) => {
-      onlineUsers.set(userId, socket.id);
-      socket.userId = userId;
+      if (userId !== socket.userId) {
+        socket.emit("chat-error", { message: "Non autorisé." });
+        return;
+      }
+
+      onlineUsers.set(socket.userId, socket.id);
       socket.currentChat = contactId;
 
-      await User.findByIdAndUpdate(userId, { isOnline: true });
+      await User.findByIdAndUpdate(socket.userId, { isOnline: true });
 
       // Informe tout le monde que cet utilisateur est en ligne
       io.emit("user_status_changed", { userId, isOnline: true });
@@ -23,11 +48,35 @@ function socketHandler(io) {
     // Envoi d'un message
     socket.on("send-message", async ({ sender, receiver, content, media }) => {
       try {
+        if (sender && sender !== socket.userId) {
+          socket.emit("message-error", { message: "Non autorisé." });
+          return;
+        }
+
+        let savedMedia;
+        if (media?.id) {
+          const asset = await MediaAsset.findOne({
+            id: media.id,
+            owner: socket.userId,
+          });
+          if (!asset) {
+            socket.emit("message-error", { message: "Média introuvable ou non autorisé." });
+            return;
+          }
+          savedMedia = {
+            id: asset.id,
+            name: asset.name,
+            mimeType: asset.mimeType,
+            type: asset.type,
+            size: asset.size,
+          };
+        }
+
         const message = await Message.create({
-          sender,
+          sender: socket.userId,
           receiver,
-          content: content || media?.name || "Média",
-          media,
+          content: content || savedMedia?.name || "Média",
+          media: savedMedia,
         });
 
         // Envoie au destinataire s'il est connecté

@@ -1,41 +1,16 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../constants/colors';
 
-// Données de test (à remplacer par API)
-const CONVERSATIONS = [
-  {
-    id: '1',
-    name: 'Kofi Traoré',
-    lastMessage: 'Salut ! Tu as vu la réunion ?',
-    time: '09:12',
-    unread: 2,
-    online: true,
-  },
-  {
-    id: '2',
-    name: 'Aminata Fall',
-    lastMessage: 'Je t\'envoie le lien 👍',
-    time: '08:45',
-    unread: 0,
-    online: false,
-  },
-  {
-    id: '3',
-    name: 'Famille Bamogo',
-    lastMessage: 'Moussa: On se retrouve à 18h ?',
-    time: 'Hier',
-    unread: 5,
-    online: true,
-  },
-];
+const API_URL = 'http://localhost:5001';
 
 // Un seul élément de la liste
 function ConversationItem({ item, onPress }) {
@@ -76,7 +51,47 @@ function ConversationItem({ item, onPress }) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadConversations();
+  }, [token]);
+
+  const loadConversations = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/messages`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Impossible de charger les conversations.');
+      }
+      setConversations(data);
+    } catch (loadError) {
+      setError(loadError.message || 'Impossible de charger les conversations.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.gold} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.emptyText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -98,28 +113,32 @@ export default function HomeScreen({ navigation }) {
         <TouchableOpacity style={[styles.tab, styles.tabActive]}>
           <Text style={[styles.tabText, styles.tabTextActive]}>Discussions</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tab}>
+        <TouchableOpacity style={styles.tab} onPress={() => navigation.navigate('Status')}>
           <Text style={styles.tabText}>Statuts</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tab}>
-          <Text style={styles.tabText}>Appels</Text>
+        <TouchableOpacity style={styles.tab} onPress={() => navigation.navigate('GroupList')}>
+          <Text style={styles.tabText}>Groupes</Text>
         </TouchableOpacity>
       </View>
 
       {/* Liste */}
       <FlatList
-        data={CONVERSATIONS}
+        data={conversations}
         keyExtractor={item => item.id}
+        ListEmptyComponent={<Text style={styles.emptyText}>Aucune conversation pour le moment.</Text>}
         renderItem={({ item }) => (
           <ConversationItem 
             item={item} 
-            onPress={() => navigation.navigate('Chat', { name: item.name })}
+            onPress={() => navigation.navigate('Chat', { 
+              contactId: item.id, 
+              contactName: item.name 
+            })}
           />
         )}
       />
 
       {/* Bouton flottant */}
-      <TouchableOpacity style={styles.fab}>
+      <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('Contacts')}>
         <Text style={styles.fabIcon}>✏️</Text>
       </TouchableOpacity>
     </View>
@@ -130,6 +149,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  emptyText: { 
+    color: colors.textSecondary, 
+    textAlign: 'center', 
+    padding: 24 
   },
   header: {
     flexDirection: 'row',

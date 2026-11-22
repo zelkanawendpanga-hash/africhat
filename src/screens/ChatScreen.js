@@ -34,7 +34,7 @@ function VideoAttachment({ uri, headers }) {
 
 export default function ChatScreen({ route, navigation }) {
   const { user, token } = useAuth();
-  const { contactId, contactName } = route.params || {};
+  const { contactId, contactName, groupId, groupName, isGroup } = route.params || {};
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,9 +43,14 @@ export default function ChatScreen({ route, navigation }) {
   const loadedMediaRef = useRef(new Set());
   const mediaObjectUrlsRef = useRef(new Set());
   const [mediaUrls, setMediaUrls] = useState({});
+  const [mediaErrors, setMediaErrors] = useState({});
+
+  const isGroupChat = isGroup || !!groupId;
+  const chatId = isGroupChat ? groupId : contactId;
+  const chatName = isGroupChat ? groupName : contactName;
 
   useEffect(() => {
-    if (!contactId) return;
+    if (!chatId) return;
 
     // Initialiser la connexion Socket.io
     socketRef.current = io(API_URL, {
@@ -54,7 +59,11 @@ export default function ChatScreen({ route, navigation }) {
 
     socketRef.current.on('connect', () => {
       console.log('Connecté au serveur Socket.io');
-      socketRef.current.emit('join-chat', { userId: user._id, contactId });
+      if (isGroupChat) {
+        socketRef.current.emit('join-group', { userId: user._id, groupId });
+      } else {
+        socketRef.current.emit('join-chat', { userId: user._id, contactId });
+      }
     });
 
     socketRef.current.on('receive-message', (newMessage) => {
@@ -77,7 +86,7 @@ export default function ChatScreen({ route, navigation }) {
         socketRef.current.disconnect();
       }
     };
-  }, [contactId, user._id, token]);
+  }, [chatId, user._id, token, isGroupChat]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -99,10 +108,16 @@ export default function ChatScreen({ route, navigation }) {
         .then((blob) => {
           const objectUrl = URL.createObjectURL(blob);
           mediaObjectUrlsRef.current.add(objectUrl);
+          setMediaErrors((previous) => {
+            const next = { ...previous };
+            delete next[mediaId];
+            return next;
+          });
           setMediaUrls((previous) => ({ ...previous, [mediaId]: objectUrl }));
         })
         .catch((error) => {
           loadedMediaRef.current.delete(mediaId);
+          setMediaErrors((previous) => ({ ...previous, [mediaId]: error.message }));
           console.error('Erreur lors du chargement du média:', error);
         });
     });
@@ -114,7 +129,11 @@ export default function ChatScreen({ route, navigation }) {
 
   const loadMessages = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/messages/${contactId}`, {
+      const endpoint = isGroupChat 
+        ? `${API_URL}/api/messages/group/${groupId}`
+        : `${API_URL}/api/messages/${contactId}`;
+      
+      const response = await fetch(endpoint, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -135,21 +154,34 @@ export default function ChatScreen({ route, navigation }) {
 
     try {
       // Envoyer via Socket.io pour temps réel
-      socketRef.current.emit('send-message', {
+      const messageData = {
         sender: user._id,
-        receiver: contactId,
         content: messageContent,
-      });
+      };
+
+      if (isGroupChat) {
+        messageData.group = groupId;
+      } else {
+        messageData.receiver = contactId;
+      }
+
+      socketRef.current.emit('send-message', messageData);
 
       // Ajouter localement pour affichage immédiat
       const tempMessage = {
         _id: Date.now().toString(),
         sender: user._id,
-        receiver: contactId,
         content: messageContent,
         isRead: false,
         createdAt: new Date(),
       };
+
+      if (isGroupChat) {
+        tempMessage.group = groupId;
+      } else {
+        tempMessage.receiver = contactId;
+      }
+
       setMessages((prev) => [...prev, tempMessage]);
 
       // Faire défiler vers le bas
@@ -213,10 +245,16 @@ export default function ChatScreen({ route, navigation }) {
 
       const message = {
         sender: user._id,
-        receiver: contactId,
         content: media.name,
         media,
       };
+
+      if (isGroupChat) {
+        message.group = groupId;
+      } else {
+        message.receiver = contactId;
+      }
+
       socketRef.current.emit('send-message', message);
       setMessages((previous) => [
         ...previous,
@@ -231,9 +269,15 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const renderMessage = ({ item }) => {
-    const isOwn = item.sender === user._id;
+    const isOwn = item.sender === user._id || (item.sender._id && item.sender._id === user._id);
     const mediaUri = item.media?.id
-      ? mediaUrls[item.media.id] || `${API_URL}/api/messages/media/${item.media.id}`
+      ? Platform.OS === 'web'
+        ? mediaUrls[item.media.id]
+        : `${API_URL}/api/messages/media/${item.media.id}`
+      : null;
+    
+    const senderName = isGroupChat && !isOwn 
+      ? (item.sender?.name || 'Utilisateur') 
       : null;
 
     return (
@@ -243,6 +287,9 @@ export default function ChatScreen({ route, navigation }) {
           isOwn ? styles.messageOwn : styles.messageOther,
         ]}
       >
+        {senderName && (
+          <Text style={styles.senderName}>{senderName}</Text>
+        )}
         <View
           style={[
             styles.messageBubble,
@@ -250,19 +297,31 @@ export default function ChatScreen({ route, navigation }) {
           ]}
         >
           {item.media?.type === 'image' ? (
-            <Image
-              source={{
-                uri: mediaUri,
-                headers: { Authorization: `Bearer ${token}` },
-              }}
-              style={styles.mediaImage}
-              resizeMode="cover"
-            />
+            mediaUri ? (
+              <Image
+                source={{
+                  uri: mediaUri,
+                  headers: Platform.OS === 'web' ? undefined : { Authorization: `Bearer ${token}` },
+                }}
+                style={styles.mediaImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.mediaName}>
+                {mediaErrors[item.media.id] || 'Chargement du média...'}
+              </Text>
+            )
           ) : item.media?.type === 'video' ? (
-            <VideoAttachment
-              uri={mediaUri}
-              headers={Platform.OS === 'web' ? undefined : { Authorization: `Bearer ${token}` }}
-            />
+            mediaUri ? (
+              <VideoAttachment
+                uri={mediaUri}
+                headers={Platform.OS === 'web' ? undefined : { Authorization: `Bearer ${token}` }}
+              />
+            ) : (
+              <Text style={styles.mediaName}>
+                {mediaErrors[item.media.id] || 'Chargement de la vidéo...'}
+              </Text>
+            )
           ) : null}
           {item.media ? (
             <Text style={[styles.mediaName, isOwn && styles.textOwn]}>
@@ -280,7 +339,7 @@ export default function ChatScreen({ route, navigation }) {
                 minute: '2-digit',
               })}
             </Text>
-            {isOwn && (
+            {isOwn && !isGroupChat && (
               <Text style={styles.messageStatus}>
                 {item.isRead ? '✓✓' : '✓'}
               </Text>
@@ -302,15 +361,21 @@ export default function ChatScreen({ route, navigation }) {
           <Text style={styles.backButton}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>{contactName || 'Contact'}</Text>
-          <Text style={styles.headerStatus}>En ligne</Text>
+          <Text style={styles.headerName}>{chatName || isGroupChat ? 'Groupe' : 'Contact'}</Text>
+          <Text style={styles.headerStatus}>
+            {isGroupChat ? 'Groupe' : 'En ligne'}
+          </Text>
         </View>
-        <TouchableOpacity style={styles.headerAction}>
-          <Text style={styles.headerIcon}>📞</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.headerAction}>
-          <Text style={styles.headerIcon}>📹</Text>
-        </TouchableOpacity>
+        {!isGroupChat && (
+          <>
+            <TouchableOpacity style={styles.headerAction}>
+              <Text style={styles.headerIcon}>📞</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.headerAction}>
+              <Text style={styles.headerIcon}>📹</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* Liste des messages */}
@@ -397,6 +462,13 @@ const styles = StyleSheet.create({
   },
   messageContainer: {
     marginBottom: 8,
+  },
+  senderName: {
+    fontSize: 12,
+    color: colors.gold,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginLeft: 16,
   },
   messageOwn: {
     alignItems: 'flex-end',

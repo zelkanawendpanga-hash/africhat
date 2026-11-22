@@ -5,12 +5,9 @@ Backend Node.js/Express avec Socket.io (temps réel) et MongoDB pour l'applicati
 ## 1. Prérequis
 
 - **Node.js** installé (v18 ou v20 recommandé)
-- **MongoDB** installé en local
+- Une URI MongoDB pour un déploiement partagé ou de production
 
-Si MongoDB n'est pas encore installé sur votre PC :
-- Téléchargez "MongoDB Community Server" depuis https://www.mongodb.com/try/download/community
-- Installez-le en gardant les options par défaut (il s'installe comme un service qui démarre automatiquement avec Windows)
-- Vérifiez qu'il tourne bien en ouvrant "Services" (services.msc) et en cherchant "MongoDB Server"
+En développement local, si `MONGO_URI` n'est pas défini, le backend démarre MongoDB automatiquement et conserve ses données dans `africhat-backend/data/mongodb`.
 
 ## 2. Installation
 
@@ -28,7 +25,7 @@ Copiez le fichier `.env.example` en `.env` :
 copy .env.example .env
 ```
 
-Le fichier `.env` par défaut fonctionne tel quel pour un usage local. Vous pouvez changer `JWT_SECRET` par une chaîne de caractères aléatoire de votre choix (c'est ce qui sécurise vos tokens de connexion).
+Le fichier `.env` par défaut fonctionne avec la base locale. Pour utiliser une base dédiée, définissez `MONGO_URI`. Remplacez `JWT_SECRET` par une chaîne aléatoire privée avant tout déploiement.
 
 ## 4. Lancer le serveur
 
@@ -40,10 +37,10 @@ Si tout fonctionne, vous devriez voir :
 
 ```
 ✅ MongoDB connecté
-🚀 Serveur démarré sur le port 5000
+🚀 Serveur démarré sur le port 5001
 ```
 
-Le serveur tourne alors sur `http://localhost:5000`.
+Le serveur tourne alors sur `http://localhost:5001`.
 
 ## 5. Se connecter depuis l'app React Native (Expo)
 
@@ -58,7 +55,7 @@ ipconfig
 Cherchez la ligne "Adresse IPv4" (souvent du type `192.168.x.x`). Utilisez ensuite dans votre app :
 
 ```js
-const API_URL = "http://192.168.x.x:5000";
+const API_URL = "http://192.168.x.x:5001";
 ```
 
 Assurez-vous que votre téléphone et votre PC sont connectés au **même réseau Wi-Fi**.
@@ -83,12 +80,12 @@ Les deux renvoient un objet utilisateur + un `token` JWT à conserver côté app
 Les fichiers sont stockés dans `africhat-backend/uploads` en développement. Ce dossier est ignoré par Git. Pour la production, remplacer ce stockage local par MinIO/S3.
 
 ### Temps réel (Socket.io)
-Événements émis/écoutés :
-- `user_connected` (client → serveur) : envoyer son `userId` juste après connexion
-- `send_message` (client → serveur) : `{ senderId, receiverId, content }`
-- `receive_message` (serveur → client) : nouveau message reçu
-- `message_sent` (serveur → client) : confirmation d'envoi
-- `typing` / `stop_typing` : indicateur "en train d'écrire"
+Le socket doit être authentifié avec `auth: { token }` à la connexion. Événements :
+- `join-chat` (client → serveur) : `{ userId, contactId }`
+- `send-message` (client → serveur) : `{ sender, receiver, content, media? }`
+- `receive-message` / `message-sent` (serveur → client) : nouveau message et confirmation
+- `message-error` (serveur → client) : échec d'envoi
+- `typing` / `stop-typing` : indicateur de saisie
 - `user_status_changed` (serveur → client) : `{ userId, isOnline }`
 
 ## 7. Prochaine étape

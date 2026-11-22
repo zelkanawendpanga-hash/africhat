@@ -7,17 +7,21 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../constants/colors';
 import * as ImagePicker from 'expo-image-picker';
 
+const API_URL = 'http://localhost:5001';
+
 export default function CreateStatusScreen({ navigation }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [type, setType] = useState('text'); // 'text' or 'image'
   const [textContent, setTextContent] = useState('');
   const [imageUri, setImageUri] = useState(null);
   const [audience, setAudience] = useState('all'); // 'all', 'contacts', 'private'
+  const [loading, setLoading] = useState(false);
 
   const pickImage = async () => {
     try {
@@ -65,9 +69,38 @@ export default function CreateStatusScreen({ navigation }) {
       return;
     }
 
-    // TODO: Envoyer au backend
-    Alert.alert('Succès', 'Statut publié avec succès !');
-    navigation.goBack();
+    setLoading(true);
+
+    try {
+      const items = type === 'text' 
+        ? [{ type: 'text', content: textContent.trim() }]
+        : [{ type: 'image', content: imageUri }];
+
+      const response = await fetch(`${API_URL}/api/statuses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          items,
+          audience,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert('Succès', 'Statut publié avec succès !');
+        navigation.goBack();
+      } else {
+        Alert.alert('Erreur', data.message || 'Impossible de publier le statut');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de publier le statut');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,8 +111,10 @@ export default function CreateStatusScreen({ navigation }) {
           <Text style={styles.headerClose}>✕</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mon statut</Text>
-        <TouchableOpacity onPress={handlePublish}>
-          <Text style={styles.headerPublish}>Publier</Text>
+        <TouchableOpacity onPress={handlePublish} disabled={loading}>
+          <Text style={[styles.headerPublish, loading && styles.headerPublishDisabled]}>
+            {loading ? 'Publication...' : 'Publier'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -232,6 +267,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.gold,
+  },
+  headerPublishDisabled: {
+    opacity: 0.5,
   },
   content: {
     flex: 1,

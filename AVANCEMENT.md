@@ -91,12 +91,21 @@ Ce document résume l'état d'avancement du projet AfriChat par rapport au cahie
 ---
 
 ### 2. Gestion des groupes (F-10, F-11)
-- Création de groupes jusqu'à 512 membres
-- Administration de groupe
-- Réponses et mentions
-- Messages épinglés
+- **Backend**:
+  - Model Group avec schéma complet
+  - GroupController avec CRUD complet
+  - Routes API pour toutes les opérations
+- **Frontend**:
+  - GroupListScreen: Liste des groupes
+  - CreateGroupScreen: Création de groupe
+  - ChatScreen mis à jour pour conversations de groupe
+  - Affichage nom expéditeur dans les groupes
+- **Fonctionnalités**:
+  - Création de groupes jusqu'à 512 membres
+  - Administration de groupe (ajout/retirer membres, promotion admin)
+  - Confidentialité (public/privé)
 
-**Priorité**: Haute (MVP)
+**Statut**: ✅ MVP complet (réponses et mentions à implémenter)
 
 ---
 
@@ -147,16 +156,16 @@ Ce document résume l'état d'avancement du projet AfriChat par rapport au cahie
 | Module | Statut | Complétion |
 |--------|--------|------------|
 | Authentification | ✅ MVP | 90% |
-| Messagerie texte | ✅ MVP | 80% |
-| Statuts | ✅ MVP | 70% |
+| Messagerie texte | ✅ MVP | 85% |
+| Statuts | ✅ MVP | 85% |
 | Paiements | ✅ MVP | 75% |
 | Médias | ⏳ MVP partiel | Images/GIF et vidéos dans le chat |
-| Groupes | ❌ | 0% |
+| Groupes | ✅ MVP | 80% |
 | Appels | ❌ | 0% |
 | Langues locales | ❌ | 0% |
 | IA | ❌ | 0% |
 
-**Complétion globale MVP Phase 1**: ~40%
+**Complétion globale MVP Phase 1**: ~55%
 
 ---
 

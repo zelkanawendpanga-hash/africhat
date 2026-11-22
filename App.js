@@ -17,6 +17,8 @@ import StatusScreen from './src/screens/StatusScreen';
 import CreateStatusScreen from './src/screens/CreateStatusScreen';
 import PaymentScreen from './src/screens/PaymentScreen';
 import PaymentHistoryScreen from './src/screens/PaymentHistoryScreen';
+import GroupListScreen from './src/screens/GroupListScreen';
+import CreateGroupScreen from './src/screens/CreateGroupScreen';
 
 // Créer le "stack" de navigation
 const Stack = createStackNavigator();
@@ -83,6 +85,16 @@ export default function App() {
             name="PaymentHistory"
             component={PaymentHistoryScreen}
             options={{ title: 'Historique' }}
+          />
+          <Stack.Screen
+            name="GroupList"
+            component={GroupListScreen}
+            options={{ title: 'Groupes' }}
+          />
+          <Stack.Screen
+            name="CreateGroup"
+            component={CreateGroupScreen}
+            options={{ title: 'Nouveau groupe' }}
           />
         </Stack.Navigator>
         <StatusBar style="light" />

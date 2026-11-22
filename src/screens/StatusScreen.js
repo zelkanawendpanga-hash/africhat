@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,59 +7,41 @@ import {
   StyleSheet,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../constants/colors';
 
-// Données de test (à remplacer par API)
-const STATUSES = [
-  {
-    id: '1',
-    user: {
-      id: '1',
-      name: 'Kofi Traoré',
-      avatar: '',
-    },
-    items: [
-      {
-        id: '1-1',
-        type: 'image',
-        content: 'https://via.placeholder.com/400x700/FFD700/000000?text=Statut+1',
-        time: 'Il y a 2h',
-        views: 12,
-      },
-      {
-        id: '1-2',
-        type: 'text',
-        content: 'Super journée au marché ! 🌞',
-        time: 'Il y a 2h',
-        views: 8,
-      },
-    ],
-  },
-  {
-    id: '2',
-    user: {
-      id: '2',
-      name: 'Aminata Fall',
-      avatar: '',
-    },
-    items: [
-      {
-        id: '2-1',
-        type: 'image',
-        content: 'https://via.placeholder.com/400x700/4CAF50/000000?text=Statut+2',
-        time: 'Il y a 5h',
-        views: 25,
-      },
-    ],
-  },
-];
+const API_URL = 'http://localhost:5001';
 
 export default function StatusScreen({ navigation }) {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [statuses, setStatuses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadStatuses();
+  }, [token]);
+
+  const loadStatuses = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/statuses`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Impossible de charger les statuts.');
+      }
+      setStatuses(data);
+    } catch (loadError) {
+      setError(loadError.message || 'Impossible de charger les statuts.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const renderStatusItem = ({ item }) => (
     <TouchableOpacity
@@ -192,6 +174,22 @@ export default function StatusScreen({ navigation }) {
     return renderStatusViewer();
   }
 
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.gold} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.emptyText}>{error}</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -229,13 +227,16 @@ export default function StatusScreen({ navigation }) {
       </TouchableOpacity>
 
       {/* Liste des statuts */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Statuts récents</Text>
-      </View>
+      {statuses.length > 0 && (
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Statuts récents</Text>
+        </View>
+      )}
 
       <FlatList
-        data={STATUSES}
+        data={statuses}
         keyExtractor={(item) => item.id}
+        ListEmptyComponent={<Text style={styles.emptyText}>Aucun statut récent.</Text>}
         renderItem={renderStatusItem}
         contentContainerStyle={styles.statusList}
       />
@@ -247,6 +248,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    backgroundColor: colors.background,
+  },
+  emptyText: { 
+    color: colors.textSecondary, 
+    textAlign: 'center', 
+    padding: 24 
   },
   header: {
     flexDirection: 'row',
