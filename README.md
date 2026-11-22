@@ -1,1 +1,1 @@
-# africhat
+# AfriChat
